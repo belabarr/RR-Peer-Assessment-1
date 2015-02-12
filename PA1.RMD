@@ -1,0 +1,139 @@
+---
+title: "Reproducible Research: Assignment 1"
+author: "Bel Abarrientos"
+date: "Saturday, February 11, 2015"
+output: 
+  html_document:
+    keep_md: true
+---
+#
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the "quantified self" movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
+
+This exercise makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+## Loading and preprocessing the data
+
+Data is unzipped, read, and rows with steps NA (not available) are removed
+
+```{r unzipread}
+unzip("repdata-data-activity.zip")
+acd1 <- read.csv("activity.csv")
+acd2 <- na.omit(acd1)
+```
+
+
+## What is mean of total number of steps taken per day?
+
+Histogram of total number of steps taken each day
+
+```{r stepshistogram}
+library(plyr)
+acd3 <- ddply(acd2, c("date"), summarise, tsteps = sum(steps))
+hist(acd3$tsteps, breaks=15, xlab="Daily Steps", main="Histogram of Daily Steps")
+```
+
+Mean and Median number of steps taken each day
+```{r meanmedian}
+boxplot(acd3$tsteps)
+summary(acd3)
+median(acd3$tsteps)
+mean(acd3$tsteps)
+```
+
+Mean is almost the same as the Median!
+
+## What is the average daily activity pattern?
+
+Time series plot (type = "l") of the 5-minute interval (x-axis) and 
+the average number of steps taken, averaged across all days (y-axis)
+
+```{r avedaypattern}
+library(ggplot2)
+acd4 <- ddply(acd2, c("interval"), summarise, msteps = mean(steps))
+
+par(pch=".")
+plot(acd4$interval, acd4$msteps, xlab="Interval", main="Average Daily Activity Pattern",
+     ylab="Steps", ylim = range(0,220),  type="l")
+
+```
+
+
+Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+```{r maxsteps}
+maxstepsinterval <- acd4[which.max(acd4$msteps),1]
+print(paste0("Interval of Max Steps: ", maxstepsinterval), type="html")
+
+```
+
+## Imputing missing values
+Now, we impute rows with missing data by replacing the NA value with average steps for the interval (calculated earlier)
+
+Get rows with Missing values
+
+```{r getmissing}
+acd5 <- subset(acd1, is.na(acd1$steps))
+row.names(acd5) <- NULL
+narowscnt <- nrow(acd5)
+print(paste0("NA Rows: ", narowscnt), type="html")
+```
+
+
+Replace missing values with mean of corresponding interval
+
+Create a new dataset that is equal to the original dataset but with the missing data filled in
+
+```{r imputemissing}
+acd5 <- acd1
+imax <- nrow(acd5)
+jmax <- nrow(acd4)
+for (i in 1:imax) {
+    if (is.na(acd5$steps[i])) { 
+        for (j in 1:jmax) {
+            if (acd4$interval[j] == acd1$interval[i]) {
+                acd5$steps[i] <- (acd4$msteps[j])
+                j <- jmax
+            }
+        }
+    }
+}
+```
+
+Summarise Total steps for each day
+
+```{r daysteps}
+acd6 <- ddply(acd5, c("date"), summarise, dsteps = sum(steps))
+```
+
+
+Histogram of Average Activity by Day Intervals
+Determine Mean and Median
+
+```{r imputehistogram}
+hist(acd6$dsteps, breaks=15, xlab="Daily Steps", main="Daily Steps Histogram")
+summary(acd6)
+```
+
+Median and Mean are the same after imputting missing values!
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+Create weekday/weekend factor
+Determine which is weekday and weekend
+
+```{r weekfactor}
+library(lubridate)
+acd7 <- acd5
+acd7$weekfactor <- ifelse(wday(acd7$date) %in% c(7,1), "Weekend", "Weekday")
+acd8 <- ddply(acd7, c("interval", "weekfactor"), summarise, msteps = mean(steps))
+acd8$weekfactor <- as.factor(acd8$weekfactor)
+```
+
+Plot Weekday and Weekend activities trend (comparing weekday and weekend pattern)
+
+```{r plotweekdayend}
+library(lattice)
+attach(acd8)
+xyplot(msteps~interval|weekfactor, main="Average Steps Weekday/Weekend", ylab="average steps", xlab="daily interval", type="l", layout=c(1,2), scales=list(x=list(tick.number=5)))
+```
